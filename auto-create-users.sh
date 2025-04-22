@@ -2,17 +2,22 @@
 
 set -euo pipefail
 
+# for logging
 green="\e[32m"
 yellow="\e[33m"
 red="\e[31m"
 purple="\033[95m"
 reset="\e[0m"
 
+# globals
 _LOGFILE=/tmp/auto-create-users.log
 _USER_FILE=""
 _CREATE_PRIMARY_GROUP=n
 _CREATE_ADDITIONAL_GROUP=n
 _INSTALL_PACKAGES=n
+
+# utils
+end_function='log i "${FUNCNAME[0]} : success"'
 
 log() {
 	msg="$2"
@@ -41,7 +46,8 @@ log() {
 
 init() {
 	if [[ $EUID -ne 0 ]]; then
-		log e "Run this script as root"
+		log x "Run this script as root"
+		return 1
 	fi
 
 	echo "" > "$_LOGFILE"
@@ -82,7 +88,7 @@ check_args() {
 	fi
 
 	_USER_FILE="$1"
-	log i "${FUNCNAME[0]} : success"
+	eval "$end_function"
 }
 
 validate_group() {
@@ -107,6 +113,8 @@ validate_group() {
 		not_empty "$current"
 		valid_charset "$current"
 	done
+
+	eval "$end_function"
 }
 
 validate_packages() {
@@ -123,60 +131,62 @@ validate_packages() {
 		current="$(echo "$packages" | cut -d/ -f$i)"
 		not_empty "$current"
 	done
+
+	eval "$end_function"
 }
 
-validate_format() {
-	line_nr=0
+validate_simple_fields() {
 
-	while IFS= read -r line; do
-		line_nr=$((line_nr+1))
+	# must have 6 fields
+	fields_nr="$(echo "$line" | awk -F: '{print NF}')"
+	if [[ $fields_nr -ne 6 ]]; then
+		log e "Line $line_nr: Invalid number of fields"
+		return 1
+	fi
 
-		# must have 6 fields
-		fields_nr="$(echo "$line" | awk -F: '{print NF}')"
-		if [[ $fields_nr -ne 6 ]]; then
-			log e "Line $line_nr: Invalid number of fields"
-			return 1
-		fi
+	name="$(echo $line | cut -f1 -d:)"
+	not_empty "$name"
+	valid_charset "$name"
 
-		log i "Validating name"
-		name="$(echo $line | cut -f1 -d:)"
-		not_empty "$name"
-		valid_charset "$name"
+	surname="$(echo $line | cut -f2 -d:)"
+	not_empty "$surname"
+	valid_charset "$surname"
 
-		log i "Validating surname"
-		surname="$(echo $line | cut -f2 -d:)"
-		not_empty "$surname"
-		valid_charset "$surname"
+	password="$(echo $line | cut -f6 -d:)"
+	not_empty "$password"
 
-		log i "Validating password"
-		password="$(echo $line | cut -f6 -d:)"
-		not_empty "$password"
+	sudo_value="$(echo $line | cut -d: -f4)"
+	if [[ "$sudo_value" != "oui" && "$sudo_value" != "non" ]]; then
+		log e "Sudo value can either be set to 'oui' or 'non'. Got '$sudo_value' instead"
+		return 1
+	fi
 
-		log i "Validating sudo"
-		sudo_value="$(echo $line | cut -d: -f4)"
-		if [[ "$sudo_value" != "oui" && "$sudo_value" != "non" ]]; then
-			log e "Sudo value can either be set to 'oui' or 'non'. Got '$sudo_value' instead"
-			return 1
-		fi
-
-		log i "Validating groups"
-		group="$(echo $line | cut -f3 -d:)"
-		validate_group "$group"
-		
-		log i "Validating packages"
-		packages="$(echo $line | cut -f5 -d:)"
-		validate_packages "$packages"
-
-	done < "$_USER_FILE"
-
-	log i "${FUNCNAME[0]} : success"
+	eval "$end_function"
 }
 
 main() {
 	init
 	check_args "$@"
-	validate_format
-	log i "${FUNCNAME[0]} : success"
+
+	line_nr=0
+
+	# process each line from the file
+	while IFS= read -r line; do
+		line_nr=$((line_nr+1))
+		log i "Processing line $line_nr"
+
+		validate_simple_fields "$line"
+
+		group="$(echo $line | cut -f3 -d:)"
+		validate_group "$group"
+		
+		packages="$(echo $line | cut -f5 -d:)"
+		validate_packages "$packages"
+
+
+	done < "$_USER_FILE"
+
+	eval "$end_function"
 }
 
 main "$@"
