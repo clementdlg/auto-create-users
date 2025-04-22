@@ -1,0 +1,10 @@
+Jean:Durand:dev,web:oui:firefox/vim:MotDePasse123
+Alice:Martin::non::Secret123!
+Bob:Durand:dev:non:curl/wget:BobMotdepasse
+Chloé:Bernard:admin,dev,infra:oui:nano:ChloeSuperPwd
+Éric:Durand::oui:htop:EricMotdepass$
+Anna:Durand:dev:non:vim:AnnaPass321
+Luc:Martin:reseau:non::Luc2024!
+Zoé:Petit:design:non:gimp/blender:Zoepass456
+Maxime:Durand:dev,reseau,infra:oui:docker/kubectl:MaximePass!
+Julie:Durand::non::JulieSimple
