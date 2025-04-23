@@ -164,11 +164,7 @@ validate_packages() {
 }
 
 create_group() {
-	log d "_CREATE_PRIMARY_GROUP = $_CREATE_PRIMARY_GROUP"
-	log d "_CREATE_ADDITIONAL_GROUP = $_CREATE_ADDITIONAL_GROUP"
-
 	[[ "$_CREATE_PRIMARY_GROUP" == "y" ]] && return
-
 	
 	group="$1"
 	fields_nr="$(echo "$group" | awk -F, '{print NF}')"
@@ -202,34 +198,39 @@ create_user() {
 	other_groups="$(echo $_GROUP | sed "s/$primary,//")"
 
 	username="${_NAME:0:1}$_SURNAME"
-	# while grep "$username" /etc/passwd; do
-	# 	
-	# done
+
+	id=0
+	if grep "$username" /etc/passwd &>/dev/null; then
+		id="$(grep -c "$username" /etc/passwd)"
+		username="$username$id"
+	fi
 
 	case $_GROUP_NR in
 		0)
 		useradd -c "$_NAME $_SURNAME" \
-				-p "$_PASSWORD" \
 				-U \
 				-m \
 				"$username"
 				;;
 		1)
 		useradd -c "$_NAME $_SURNAME" \
-				-p "$_PASSWORD" \
 				-g "$_GROUP" \
 				-m \
 				"$username"
 				;;
 		*)
 		useradd -c "$_NAME $_SURNAME" \
-				-p "$_PASSWORD" \
 				-g "$primary" \
 				-G "$other_groups" \
 				-m \
 				"$username"
+				# -p "$_PASSWORD" \
 				;;
 		esac
+
+	echo "$username:$_PASSWORD" | chpasswd
+	chage -d 0 "$username"
+
 	eval "$end_function"
 }
 

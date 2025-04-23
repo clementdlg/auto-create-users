@@ -8,3 +8,5 @@ Luc:Martin:reseau:non::Luc2024!
 Zoé:Petit:design:non:gimp/blender:Zoepass456
 Maxime:Durand:dev,reseau,infra:oui:docker/kubectl:MaximePass!
 Julie:Durand::non::JulieSimple
+Jojo:Durand::non::JulieSimple
+Jiji:Durand::non::JulieSimple
