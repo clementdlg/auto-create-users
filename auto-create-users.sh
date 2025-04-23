@@ -271,6 +271,19 @@ install_packages() {
 	done
 }
 
+populate_home() {
+	files_nr=$(( RANDOM % 5 + 5 ))
+	for i in $(seq 1 $files_nr); do
+		size=$(( RANDOM % 10 + 1 ))
+		size=$(( size * 5000))
+
+		file_name="file$i"
+		path="/home/$_USERNAME/$file_name"
+
+		dd if=/dev/urandom of="$path" count="$size" bs=1024 status=progress &>/dev/null
+	done
+}
+
 main() {
 	init
 	check_args "$@"
@@ -309,7 +322,7 @@ main() {
 		create_user
 		add_to_sudoers
 		install_packages
-		# populate_home
+		populate_home
 
 	done < "$_USER_FILE"
 
