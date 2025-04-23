@@ -48,6 +48,8 @@ init() {
 	fi
 
 	echo "" > "$_LOGFILE"
+
+	apt-get update -qq &>/dev/null
 }
 
 not_empty() {
@@ -115,6 +117,8 @@ validate_simple_fields() {
 		return 1
 	fi
 
+	[[ "$sudo_value" == "oui" ]] && _ADD_TO_SUDOERS=y
+
 	eval "$end_function"
 }
 
@@ -160,7 +164,20 @@ validate_packages() {
 		not_empty "$current"
 	done
 
+	_PACKAGE_NR="$fields_nr"
+	_PACKAGES="$packages"
+
 	eval "$end_function"
+}
+
+user_already_exists() {
+	comment="$_NAME $_SURNAME"
+	if grep "$comment" /etc/passwd &>/dev/null; then
+		log i "$comment already exists; Skipping"
+		return 0
+	fi
+
+	return 1
 }
 
 create_group() {
@@ -183,16 +200,10 @@ create_group() {
 }
 
 create_user() {
-	# -c "comment"
-	# -g primary group
-	# -G "group1,group2"
-	# -m create home dir
-	# -p password
-	# -U create groups same as username
-	log d "name = $_NAME"
-	log d "surname = $_SURNAME"
-	log d "password = $_PASSWORD"
-	log d "group = $_GROUP"
+	# log d "name = $_NAME"
+	# log d "surname = $_SURNAME"
+	# log d "password = $_PASSWORD"
+	# log d "group = $_GROUP"
 
 	primary="$(echo $_GROUP | cut -d, -f1)"
 	other_groups="$(echo $_GROUP | sed "s/$primary,//")"
@@ -204,6 +215,8 @@ create_user() {
 		id="$(grep -c "$username" /etc/passwd)"
 		username="$username$id"
 	fi
+
+	_USERNAME="$username"
 
 	case $_GROUP_NR in
 		0)
@@ -234,22 +247,49 @@ create_user() {
 	eval "$end_function"
 }
 
+add_to_sudoers() {
+	[[ "$_ADD_TO_SUDOERS" == "n" ]] && return
+
+	usermod -aG sudo "$_USERNAME"
+	eval "$end_function"
+}
+
+install_packages() {
+	for i in $(seq 1 $_PACKAGE_NR); do
+		current="$(echo "$packages" | cut -d/ -f$i)"
+
+		if dpkg -l "$current" &>/dev/null; then
+			log i "Package '$current' is already installed; skipping."
+			continue
+		fi
+		
+		if ! apt-get install "$current" -y -qq &>/dev/null; then
+			log e "Invalid package name '$current'. Not installing"
+		else
+			log i "Successfully installed package '$current'"
+		fi
+	done
+}
+
 main() {
 	init
 	check_args "$@"
 
 	line_nr=0
 
-	# process each line from the file
 	while IFS= read -r line; do
 		_CREATE_PRIMARY_GROUP=n
 		_CREATE_ADDITIONAL_GROUP=n
+		_ADD_TO_SUDOERS=n
 		_INSTALL_PACKAGES=n
 		_NAME=""
 		_SURNAME=""
 		_GROUP=""
 		_GROUP_NR=0
 		_PASSWORD=""
+		_USERNAME=""
+		_PACKAGES=""
+		_PACKAGE_NR=""
 
 		line_nr=$((line_nr+1))
 
@@ -260,13 +300,16 @@ main() {
 		_GROUP="$(echo "$line" | cut -f3 -d:)"
 		validate_group "$_GROUP"
 		
-		packages="$(echo "$line" | cut -f5 -d:)"
-		validate_packages "$packages"
+		_PACKAGES="$(echo "$line" | cut -f5 -d:)"
+		validate_packages "$_PACKAGES"
 
-		create_group "$group"
+		user_already_exists && continue
+
+		create_group "$_GROUP"
 		create_user
-		# install_packages
-
+		add_to_sudoers
+		install_packages
+		# populate_home
 
 	done < "$_USER_FILE"
 
