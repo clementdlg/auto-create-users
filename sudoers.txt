@@ -1,4 +1,4 @@
 fsananes:ALL:ALL,nopasswd
 cdelon:buroprofs,dpmoc:/usr/bin/rm -r *,nopasswd
-mantoine:buroprofs,soutien:apt,passwd@/usr/sbin/shutdown -r,passwd@nano,passwd
+mantoine:buroprofs,soutien:apt,passwd@/usr/sbin/wipefs --help,passwd@nano,passwd
 ktrancho:buroprofs:/usr/sbin/fdisk -l,nopasswd@/usr/sbin/repquota ktrancho,passwd

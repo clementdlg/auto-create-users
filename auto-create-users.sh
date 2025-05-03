@@ -258,7 +258,7 @@ install_packages() {
 	for i in $(seq 1 $_PACKAGE_NR); do
 		current="$(echo "$packages" | cut -d/ -f$i)"
 
-		if dpkg -l "$current" &>/dev/null; then
+		if dpkg-query -s "$current" &>/dev/null; then
 			log i "Package '$current' is already installed; skipping."
 			continue
 		fi

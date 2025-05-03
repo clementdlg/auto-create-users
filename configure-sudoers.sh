@@ -85,11 +85,11 @@ validate_fields() {
     fi
 
     _LOGIN="$(echo "$line" | cut -f1 -d:)"
-    _MACHINES="$(echo "$line" | cut -f2 -d:)"
+    _HOSTS="$(echo "$line" | cut -f2 -d:)"
     _COMMANDS="$(echo "$line" | cut -f3 -d:)"
 
 	not_empty "$_LOGIN"
-	not_empty "$_MACHINES"
+	not_empty "$_HOSTS"
 	not_empty "$_COMMANDS"
 
 	eval "$end_function"
@@ -135,7 +135,6 @@ validate_commands() {
 
 	fields_nr="$(echo "$_COMMANDS" | awk -F@ '{print NF}')"
 
-	# iterate over each command
 	for i in $(seq 1 $fields_nr); do
 		current="$(echo "$_COMMANDS" | cut -d@ -f$i)"
 
@@ -151,18 +150,31 @@ validate_commands() {
 
 		validate_cmd "$cmd"
 		validate_mode "$mode"
-	done
+done
 
 	eval "$end_function"
 }
 
-# append_cmd_path() {
+validate_login() {
+	if groups "$_LOGIN" | grep -q -E '\b(sudo|wheel)\b'; then
+        return 0
+    fi
+
+	if sudo -lU "$_LOGIN" | grep -q '(ALL)'; then
+		return 0
+	fi
+
+	log e "User exists, but is not sudoers"
+	return 1
+}
+
+# append_path_to_cmd() {
 #
 # }
 
 # create_machine_alias() {
-#     machines_list=$(echo "$_MACHINES" | tr ',' '\n')
-#     alias_name=$(echo "$_MACHINES" | tr ',' '_')
+#     machines_list=$(echo "$_HOSTS" | tr ',' '\n')
+#     alias_name=$(echo "$_HOSTS" | tr ',' '_')
 #     alias_exists=$(grep -q "Cmnd_Alias $alias_name" /etc/sudoers)
 #
 #     if [[ -z "$alias_exists" ]]; then
@@ -217,11 +229,14 @@ main() {
         log i "Processing line $line_nr"
 
 		_LOGIN=""
-		_MACHINES=""
+		_HOSTS=""
 		_COMMANDS=""
 		_BASE_CMD=""
 
+		_HOST_NEEDS_ALIAS="n"
+
         validate_fields "$line"
+		validate_login "$_LOGIN"
         validate_commands "$line"
 
         # create_machine_alias
