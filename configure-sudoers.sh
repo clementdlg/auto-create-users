@@ -173,11 +173,20 @@ write_to_sudoers_file() {
 create_machine_alias() {
     hosts_nr="$(echo "$_HOSTS" | awk -F, '{print NF}')"
 
-	[[ "$hosts_nr" -eq 1 ]] && return
+	if [[ "$hosts_nr" -eq 1 ]]; then
+		_ALIAS_NAME="$_HOSTS"
+		return
+	fi
 
 	# Host_Alias CDELON_HOSTS = buroprofs,dpmoc
 	_ALIAS_NAME="${_LOGIN^^}_HOSTS"
 	alias="Host_Alias ${_ALIAS_NAME} = ${_HOSTS}"
+
+	if grep -q "Host_Alias ${_ALIAS_NAME}" /etc/sudoers; then
+		log i "Alias ${_ALIAS_NAME} already exists. Skipping"
+		return
+	fi
+
 	write_to_sudoers_file "$alias"
 }
 
@@ -226,6 +235,16 @@ set_cmd_string() {
 
 }
 
+configure_sudoers() {
+	#  esgi ALL=(root) /usr/sbin/shutdown, NOPASSWD: /usr/sbin/reboot
+	if grep -q "^${_LOGIN}" /etc/sudoers; then
+		log i "User entree for ${_LOGIN} already exists. Skipping"
+		return
+	fi
+
+	write_to_sudoers_file "${_LOGIN} ${_ALIAS_NAME}=(root) ${_CMD_STRING}"
+}
+
 main() {
     init
     check_args "$@"
@@ -251,9 +270,8 @@ main() {
 		
         create_machine_alias
 		set_cmd_string
-		log d "_CMD_STRING = '$_CMD_STRING'"
-
-        # configure_sudoers
+        configure_sudoers
+		
     done < "$_CONFIG_FILE"
 
     log i "Sudo configuration has finished successfully"
