@@ -78,7 +78,7 @@ not_empty() {
 }
 
 validate_fields() {
-    fields_nr="$(echo "$line" | awk -F: '{print NF}')"
+    local fields_nr="$(echo "$line" | awk -F: '{print NF}')"
     if [[ $fields_nr -ne 3 ]]; then
         log e "Line $line_nr: Invalid number of fields"
         return 1
@@ -108,15 +108,13 @@ validate_command_fields() {
 validate_cmd() {
 	cmd="$1"
 
-	fields_nr="$(echo "$cmd" | awk '{print NF}')"
+	local fields_nr="$(echo "$cmd" | awk '{print NF}')"
 
 	if [[ "$fields_nr" -gt 1 ]]; then
 		cmd="$(echo "$cmd" | awk '{print $1}')"
 	fi
 
-	_BASE_CMD="$cmd"
-
-	if ! [[ "$cmd" == "ALL" || -x "$(command -v "$cmd")" ]]; then
+	if ! [[ "$cmd" == "ALL" || -n "$(command -v "$cmd")" ]]; then
 		log e "The command '$cmd' does not exist on the system"
 		return 1
 	fi
@@ -129,28 +127,27 @@ validate_mode() {
 		log e "Mode '$mode' is invalid"
 		return 1
 	fi
+
+	if [[ "$mode" == "nopasswd" ]]; then
+		_PASSWD="n"
+	fi
 }
 
 validate_commands() {
 
-	fields_nr="$(echo "$_COMMANDS" | awk -F@ '{print NF}')"
+	local fields_nr="$(echo "$_COMMANDS" | awk -F@ '{print NF}')"
 
 	for i in $(seq 1 $fields_nr); do
 		current="$(echo "$_COMMANDS" | cut -d@ -f$i)"
-
-		log d "validating '$current'"
 
 		validate_command_fields "$current"
 
 		cmd="$(echo "$current" | cut -d, -f1)"
 		mode="$(echo "$current" | cut -d, -f2)"
 
-		log d "cmd = $cmd"
-		log d "mode = $mode"
-
 		validate_cmd "$cmd"
 		validate_mode "$mode"
-done
+	done
 
 	eval "$end_function"
 }
@@ -168,54 +165,66 @@ validate_login() {
 	return 1
 }
 
-# append_path_to_cmd() {
-#
-# }
+write_to_sudoers_file() {
+	line="$1"
+	echo "$line" | EDITOR='tee -a' visudo
+}
 
-# create_machine_alias() {
-#     machines_list=$(echo "$_HOSTS" | tr ',' '\n')
-#     alias_name=$(echo "$_HOSTS" | tr ',' '_')
-#     alias_exists=$(grep -q "Cmnd_Alias $alias_name" /etc/sudoers)
-#
-#     if [[ -z "$alias_exists" ]]; then
-#         echo "Cmnd_Alias $alias_name = $machines_list" >> /etc/sudoers
-#         log i "Created machine alias for $_LOGIN: $alias_name"
-#     else
-#         log i "Machine alias for $_LOGIN already exists: $alias_name"
-#     fi
-# }
-#
-# configure_sudoers() {
-#     sudoers_file="/etc/sudoers"
-#
-#     # Verify user is a sudoer
-#     if ! id "$_LOGIN" &>/dev/null; then
-#         log e "User $_LOGIN does not exist, skipping."
-#         return
-#     fi
-#
-#     log i "Configuring sudo for $_LOGIN"
-#
-#     # Add the user to sudoers
-#     for cmd in $(echo "$_COMMANDS" | tr ',' '\n'); do
-#         command=$(echo "$cmd" | cut -f1 -d@)
-#         mode=$(echo "$cmd" | cut -f2 -d@)
-#
-#         # Check if the command is full path or relative
-#         if ! command -v "$command" &>/dev/null; then
-#             log e "Command '$command' not found, skipping."
-#             continue
-#         fi
-#
-#         log i "Granting $_LOGIN $mode access to $command on $alias_name"
-#
-#         if [[ "$mode" == "nopasswd" ]]; then
-#             echo "$_LOGIN $alias_name=$command NOPASSWD: ALL" >> /etc/sudoers
-#         else
-#             echo "$_LOGIN $alias_name=$command" >> /etc/sudoers
-#         fi
-#     done
-# }
+create_machine_alias() {
+    hosts_nr="$(echo "$_HOSTS" | awk -F, '{print NF}')"
+
+	[[ "$hosts_nr" -eq 1 ]] && return
+
+	# Host_Alias CDELON_HOSTS = buroprofs,dpmoc
+	_ALIAS_NAME="${_LOGIN^^}_HOSTS"
+	alias="Host_Alias ${_ALIAS_NAME} = ${_HOSTS}"
+	write_to_sudoers_file "$alias"
+}
+
+set_cmd_path() {	
+	cmd="$1" # rm -r *
+
+	local fields_nr="$(echo "$cmd" | awk '{print NF}')" # 3
+
+	if [[ "$fields_nr" -gt 1 ]]; then
+		base_cmd="$(echo "$cmd" | awk '{print $1}')"
+		_CMD_ARGS="${cmd#"$base_cmd "}"
+		_CMD_PATH="$base_cmd"
+		cmd="$base_cmd"
+	fi
+
+	if [[ ! -f "$cmd" && "$cmd" != "ALL" ]]; then
+		_CMD_PATH="$(which "$cmd")"
+	fi
+}
+
+set_cmd_string() {
+	local fields_nr="$(echo "$_COMMANDS" | awk -F@ '{print NF}')"
+
+	for i in $(seq 1 $fields_nr); do
+		current="$(echo "$_COMMANDS" | cut -d@ -f$i)"
+
+		cmd="$(echo "$current" | cut -d, -f1)"
+		mode="$(echo "$current" | cut -d, -f2)"
+
+		_CMD_PATH="$cmd"
+		_CMD_ARGS=""
+		ending=", "
+
+		if [[ "$_PASSWD" == "n" ]]; then
+			_CMD_STRING="${_CMD_STRING}NOPASSWD: "
+		fi
+
+		set_cmd_path "$cmd"
+
+		if (( i == fields_nr )); then
+			ending=""
+		fi
+
+		_CMD_STRING="${_CMD_STRING}${_CMD_PATH} ${_CMD_ARGS}${ending}"
+	done
+
+}
 
 main() {
     init
@@ -231,15 +240,19 @@ main() {
 		_LOGIN=""
 		_HOSTS=""
 		_COMMANDS=""
-		_BASE_CMD=""
-
-		_HOST_NEEDS_ALIAS="n"
+		_PASSWD="y"
+		_ALIAS_NAME=""
+		_CMD_STRING=""
 
         validate_fields "$line"
 		validate_login "$_LOGIN"
         validate_commands "$line"
 
-        # create_machine_alias
+		
+        create_machine_alias
+		set_cmd_string
+		log d "_CMD_STRING = '$_CMD_STRING'"
+
         # configure_sudoers
     done < "$_CONFIG_FILE"
 
