@@ -63,10 +63,16 @@ check_args() {
 set_mode() {
 	if [[ "$_SHOW_SUID" == "y" && "$_SHOW_SGID" == "y" ]]; then
 		_DISPLAY_MODE="suid_sgid"
+		_PERM="-2000 -o -perm -4000"
+
 	elif [[ "$_SHOW_SUID" == "y" ]]; then
 		_DISPLAY_MODE="suid_only"
+		_PERM="-4000"
+
 	else
 		_DISPLAY_MODE="sgid_only"
+		_PERM="-2000"
+
 	fi
 
 	echo "Selected mode : $_DISPLAY_MODE"
@@ -92,18 +98,7 @@ create_list() {
 
 	set +e
 
-	# find / -perm -2000 -type f -fprintf "$full_path" "%p ${modification_time}\n" 2>/dev/null
-	case "$_DISPLAY_MODE" in
-		"suid_only")
-			find / -perm -4000 -type f -fprintf "$full_path" "%p ${modification_time}\n" 2>/dev/null
-			;;
-		"sgid_only")
-			find / -perm -2000 -type f -fprintf "$full_path" "%p ${modification_time}\n" 2>/dev/null
-			;;
-		"suid_sgid")
-			find / \( -perm -2000 -o -perm -4000 \) -type f -fprintf "$full_path" "%p ${modification_time}\n" 2>/dev/null
-			;;
-	esac
+	find / \( -perm $_PERM \) -type f -fprintf "$full_path" "%p ${modification_time}\n" 2>/dev/null
 	set -e
 
 	count="$(wc -l "$full_path" | awk '{print $1}')"
@@ -122,13 +117,14 @@ main() {
 	_DISPLAY_MODE=""
 	_WORKSPACE="/var/tmp/$(basename "$0")"
 	_FILE_NAME=""
+	_PERM=""
 
 	init
 	check_args "$@"
 	set_mode
 	set_workspace
 	create_list
-	diff_list
+	# diff_list
 }
 
 main "$@"
