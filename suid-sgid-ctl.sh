@@ -2,6 +2,18 @@
 
 set -euo pipefail
 
+error() {
+	msg="$1"
+	echo "Error : $msg" 1>&2
+}
+
+init() {
+	if [[ $EUID -ne 0 ]]; then
+		error "Run this script as root"
+		return 1
+	fi
+}
+
 show_usage() {
 	echo "Usage :"
 	echo "-u : show SUID files"
@@ -48,12 +60,62 @@ check_args() {
 	fi
 }
 
+set_mode() {
+	if [[ "$_SHOW_SUID" == "y" && "$_SHOW_SGID" == "y" ]]; then
+		_DISPLAY_MODE="suid_sgid"
+		_OCTAL_MODE=6000
+	elif [[ "$_SHOW_SUID" == "y" ]]; then
+		_DISPLAY_MODE="suid_only"
+		_OCTAL_MODE=4000
+	else
+		_DISPLAY_MODE="sgid_only"
+		_OCTAL_MODE=2000
+	fi
+
+	echo "Selected mode : $_DISPLAY_MODE"
+}
+
+set_workspace() {
+	if [[ ! -f "$_WORKSPACE" ]]; then
+		mkdir -p "$_WORKSPACE"
+	fi
+
+	timestamp="$(date +%H-%M-%S)"
+
+	_FILE_NAME="${_DISPLAY_MODE}_${timestamp}.list"
+
+	echo "" > "$_FILE_NAME"
+}
+
+create_list() {
+	echo "Creating new list list..."
+
+	modification_time="%TY-%Tm-%Td %TH:%TM:%TS"
+	full_path="$_WORKSPACE/$_FILE_NAME"
+
+	set +e
+	find / -perm "-${_OCTAL_MODE}" -type f -fprintf "$full_path" "%p ${modification_time}\n" 2>/dev/null
+	set -e
+
+	count="$(wc -l "$full_path" | awk '{print $1}')"
+
+	echo "List was created at $full_path"
+	echo "Found ($count) elements for $_DISPLAY_MODE"
+}
+
 main() {
 	_SHOW_SUID="n"
 	_SHOW_SGID="n"
+	_DISPLAY_MODE=""
+	_OCTAL_MODE=""
+	_WORKSPACE="/var/tmp/$(basename "$0")"
+	_FILE_NAME=""
 
+	init
 	check_args "$@"
-	show_info
+	set_mode
+	set_workspace
+	create_list
 }
 
 main "$@"
