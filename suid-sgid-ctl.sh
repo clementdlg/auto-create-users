@@ -83,11 +83,19 @@ set_workspace() {
 		mkdir -p "$_WORKSPACE"
 	fi
 
-	timestamp="$(date +%H-%M-%S)"
+	timestamp="$(date +%Y-%m-%d-%H-%M-%S)"
 
 	_FILE_NAME="${_DISPLAY_MODE}_${timestamp}.list"
 
-	echo "" > "$_FILE_NAME"
+	# echo "" > "$_WORKSPACE/$_FILE_NAME"
+}
+
+set_previous_file() {
+	_PREVIOUS_FILE="$(find "$_WORKSPACE" \
+		-type f \
+		-name "${_DISPLAY_MODE}_*" \
+		| sort -n \
+		| tail -1)"
 }
 
 create_list() {
@@ -98,7 +106,10 @@ create_list() {
 
 	set +e
 
-	find / \( -perm $_PERM \) -type f -fprintf "$full_path" "%p ${modification_time}\n" 2>/dev/null
+	find / \( -perm $_PERM \) \
+		-type f \
+		-fprintf "$full_path" "%p ${modification_time}\n"  \
+		2>/dev/null
 	set -e
 
 	count="$(wc -l "$full_path" | awk '{print $1}')"
@@ -107,8 +118,24 @@ create_list() {
 	echo "Found ($count) elements for $_DISPLAY_MODE"
 }
 
-diff_list() {
-	prev_list=""
+get_diff() {
+	if [[ ! -f "$_PREVIOUS_FILE" ]]; then
+		echo "No diff to show because their is no previous list available"
+		return
+	fi
+
+	echo "Comparing $(basename $_PREVIOUS_FILE) to $_FILE_NAME"
+
+	set +e
+	diff="$(diff "$_PREVIOUS_FILE" "$_WORKSPACE/$_FILE_NAME")"
+	set -e
+
+	if [[ -n "$diff" ]]; then
+		echo "Warning ! Their is differences among the 2 files !"
+		echo "$diff"
+	else
+		echo "The two files are identical"
+	fi
 }
 
 main() {
@@ -117,14 +144,16 @@ main() {
 	_DISPLAY_MODE=""
 	_WORKSPACE="/var/tmp/$(basename "$0")"
 	_FILE_NAME=""
+	_PREVIOUS_FILE=""
 	_PERM=""
 
 	init
 	check_args "$@"
 	set_mode
 	set_workspace
+	set_previous_file
 	create_list
-	# diff_list
+	get_diff
 }
 
 main "$@"
